@@ -11,11 +11,12 @@ import matplotlib.gridspec as gridspec
 print(sys.version)
 print(f"flopy version: {flopy.__version__}")
 
-path = os.path.join("SUB-Yulin-3")
+path = os.path.join("git")
+
 ##### Creating the MODFLOW Model #####
 temp_dir = TemporaryDirectory()
-workspace = Path(r"D:\NTU_Stride-C\codes\modflow\SUB-Yulin-3")
-name = "SUB-Yulin-3"
+workspace = Path(r"D:\NTU_Stride-C\codes\modflow\git")
+name = "SUB-Yulin-5"
 mf = flopy.modflow.Modflow(name, exe_name="mf2005", model_ws=workspace)
 
 # DIS
@@ -60,17 +61,23 @@ dis = flopy.modflow.ModflowDis(
 )
 
 # BAS BASic
-ibound = np.ones((nlay, nrow, ncol), dtype=np.int32)
+ibound = np.ones((nlay, nrow, ncol), dtype=np.int32)    #If IBOUND< 0, constant head. = 0, is no flow. > 0, is variable head.
 ibound[0, :, :] = 2
-ibound[0, :, int(ncol//2-1)] = -1
+ibound[0, :, int(ncol-1)] = -1
+ibound[0, :, 0] = -1
 strt = 10.0*np.ones((nlay, nrow, ncol),dtype=np.float32)
+#strt[0, :, :] = zbot[0, :, 0]
+#strt[1, :, :] = zbot[1, :, 0]
+#strt[2, :, :] = zbot[2, :, 0]
 bas = flopy.modflow.ModflowBas(mf, ibound=ibound, strt=strt)
 
 # BCF   Block Centered Flow Package
 # https://flopy.readthedocs.io/en/latest/source/flopy.modflow.mfbcf.html
-laycon = [1, 0, 0]      # laycon = Ltype
-sf1 = [0.1, 6.56e-5, 2.62e-4]       # specific storage
-hy = 20                             # hydraulic conductivity
+laycon = [1, 0, 0]      # laycon = Ltype, 1 = unconfined, anothers = confined
+sf1 = [0.0077, 6.56e-5, 2.62e-4]       # specific storage
+# tran if Ltype = 0, 2
+# hy if Ltype = 1, 3 
+hy = 7.34                             # hydraulic conductivity
 tran = np.ones((nlay, nrow, ncol), dtype='f')
 tran[1, :, :] = 0.5
 tran[1, 0, :] = 1000     # 第一橫排全部
@@ -92,24 +99,29 @@ bcf = flopy.modflow.ModflowBcf(
 )
 
 # WEL WELL 
-pumping_rate = -1000.0
+pumping_rate = -1.53169e5
 recharging_rate = 100
-wel_sp = np.zeros((100, 4))
+wel_sp = np.zeros((1, 4))
 #wel_sp[:, 0] = 1
 #wel_sp[:, 1] = 1
-wel_sp[:, 3] = recharging_rate
-wel_sp[ncol//2-1, 3] = pumping_rate
-#wel_sp[ncol//2-1 + ncol, 3] = pumping_rate
-#for j in range(nrow):
-for i in range(ncol):
-#    wel_sp[i+ncol*j, 1] = j
-    wel_sp[i, 2] = i
-
+#wel_sp[:, 3] = recharging_rate
+wel_sp[0, 3] = pumping_rate
+#wel_spncol//2-1 + ncol, 3] = pumping_rate
+wel_sp[0, 2] = ncol/2-1
 
 stress_period_data = {i: wel_sp for i in range(nper)}
 wel = flopy.modflow.ModflowWel(
     mf, 
     stress_period_data=stress_period_data
+)
+
+# rch Recharge
+nrchop = 1
+rech = 0.1368 # m/day
+rch = flopy.modflow.ModflowRch(
+    mf, 
+    rech = rech,
+    nrchop = nrchop,
 )
 
 # SUB
@@ -208,7 +220,7 @@ oc = flopy.modflow.ModflowOc(
 mf.write_input() 
 
 # 
-m = flopy.modflow.Modflow.load("SUB-Yulin-3.nam", model_ws=path)
+m = flopy.modflow.Modflow.load("SUB-Yulin-5.nam", model_ws=path)
 m.change_model_ws(workspace)
 help(m.check)
 
