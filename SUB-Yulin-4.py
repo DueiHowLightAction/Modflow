@@ -11,7 +11,7 @@ import matplotlib.gridspec as gridspec
 print(sys.version)
 print(f"flopy version: {flopy.__version__}")
 
-path = os.path.join("git")
+path = os.path.join("workspace")
 
 ##### Creating the MODFLOW Model #####
 temp_dir = TemporaryDirectory()
@@ -21,16 +21,16 @@ mf = flopy.modflow.Modflow(name, exe_name="mf2005", model_ws=workspace)
 
 # DIS
 Lx = 25000        #25870
-Ly = 50
+Ly = 500
 nlay = 3
-ncol = 100
-nrow = 1
+ncol = 200
+nrow = 10
 ztop = 0 #[0, -100, -150]
 zbot = [-1320.0, -1688.0, -2500.0]
 zbot = np.zeros((nlay, nrow, ncol), dtype = np.float16)
 for i in range(ncol):
-    zbot[0, :, i] = -1320 - (1800-1320)/100*i
-    zbot[1, :, i] = -1688 - (2150-1688)/100*i
+    zbot[0, :, i] = -1320 - (1800-1320)/ncol*i
+    zbot[1, :, i] = -1688 - (2150-1688)/ncol*i
 zbot[2, :, :] = -2500
 delr = Lx / ncol
 delc = Ly / nrow
@@ -62,14 +62,14 @@ dis = flopy.modflow.ModflowDis(
 
 # BAS BASic
 ibound = np.ones((nlay, nrow, ncol), dtype=np.int32)    #If IBOUND< 0, constant head. = 0, is no flow. > 0, is variable head.
-ibound[0, :, :] = 2
-ibound[0, :, int(ncol-1)] = -1
-ibound[0, :, 0] = -1
+ibound[:, :, :] = 2
+ibound[:, :, int(ncol-1)] = -1
+ibound[:, :, 0] = -1
 strt = 10.0*np.ones((nlay, nrow, ncol),dtype=np.float32)
 for i in range(ncol):
-    strt[0, :, i] = (-zbot[0, :, i]-0)/2
-    strt[0, :, i] = (-zbot[1, :, i]+zbot[0, :, i])/2
-    strt[0, :, i] = (-zbot[2, :, i]+zbot[1, :, i])/2
+    strt[0, :, i] = (-zbot[0, 0, i]-0)/2
+    strt[1, :, i] = (-zbot[1, 0, i]-0)/2
+    strt[2, :, i] = (-zbot[2, 0, i]-0)/2
 #strt[0, :, :] = zbot[0, :, 0]
 #strt[1, :, :] = zbot[1, :, 0]
 #strt[2, :, :] = zbot[2, :, 0]
@@ -285,8 +285,8 @@ np.savetxt(workspace1.with_name("head.txt"), head[0])
 # col 1 的水頭剖面隨時間變化
 #plt.title("Heads of vertical section in row 1")
 fig = plt.figure(figsize=(15, 9))
-plot_kper=[0, 5, 10]        # 這樣設是為了下面畫well profile
-mytimes = [times[plot_kper[0]], times[plot_kper[1]], times[plot_kper[2]]]
+plot_kper=[0, 1, 5, 10]        # 這樣設是為了下面畫well profile
+mytimes = [times[plot_kper[0]], times[plot_kper[1]], times[plot_kper[2]], times[plot_kper[3]]]
 for iplot, time in enumerate(mytimes):
     print("*****Processing time: ", time)
     head = sobj2.get_data(totim=time)
@@ -297,11 +297,11 @@ for iplot, time in enumerate(mytimes):
     print("  std: ", head.std())
 
     ax = fig.add_subplot(len(mytimes)+1, 1, iplot + 1, aspect="equal")
-    ax.set_title(f"day {time}")
+    ax.set_title(f"day {int(time)}")
 
     ysect = flopy.plot.PlotCrossSection(model=mf, line={"Row": 0})
     pc = ysect.plot_array(head, head=head, alpha=0.5, ax=ax)
-    pc1 = ysect.contour_array(head, head=head, alpha=0.5, ax=ax)#, levels=np.arange(1, 10, 1))
+#    pc1 = ysect.contour_array(head, head=head, alpha=0.5, ax=ax)#, levels=np.arange(1, 10, 1))
     patches = ysect.plot_ibound(head=head, ax=ax)
     linecollection = ysect.plot_grid(ax=ax)
     cb = plt.colorbar(pc, shrink=0.75, ax=ax)
@@ -316,38 +316,47 @@ plt.show()
 fig = plt.figure(figsize=(10, 6))
 
 
-plt.plot(times, subs_t[:,50], "-o")
-plt.plot(times, comp1_t[:,50], "-o")
-plt.plot(times, comp2_t[:,50], "-o")
-plt.plot(times, comp3_t[:,50], "-o")
+plt.plot(times, subs_t[:,50], "-o", label="Total Subsidence")
+plt.plot(times, comp1_t[:,50], "-o", label="Layer 1 compaction")
+plt.plot(times, comp2_t[:,50], "-o", label="Layer 2 compaction")
+plt.plot(times, comp3_t[:,50], "-o", label="layer 3 compaction")
 plt.xlabel("time (days)")
 plt.ylabel("subsidence(m)")
+plt.legend()
 
 plt.show()
 
 # 畫出各層的水頭值
-#extent = (delr / 2.0, Lx - delr / 2.0, Ly - delc / 2.0, delc / 2.0)
+extent = (delr / 2.0, Lx - delr / 2.0, Ly - delc / 2.0, delc / 2.0)
 
-#fig = plt.figure(figsize=(10, 6))
-#gs = gridspec.GridSpec(2, 3, height_ratios=[2, 1])
-#ax1 = plt.subplot(gs[0, 0])
-#ax2 = plt.subplot(gs[0, 1])
-#ax3 = plt.subplot(gs[0, 2])
-#ax4 = plt.subplot(gs[1, :])
-#
-##ax1.contourf(head[0, :, :], levels=np.arange(1, 23, 1), extent=extent)
-#ax1.set_title("layer 1 head")
-##ax2.contourf(head[1, :, :], levels=np.arange(1, 23, 1), extent=extent)
-#ax2.set_title("layer 2 head")
-##ax3.contourf(head[2, :, :], levels=np.arange(1, 23, 1), extent=extent)
-#ax3.set_title("layer 3 head")
-#ax4.plot(times, subs_t)
-#ax4.set_xlabel("time (days)")
-#ax4.set_ylabel("subsidence(m)")
+fig = plt.figure(figsize=(15, 6))
+gs = gridspec.GridSpec(2, 3, height_ratios=[1, 1])
+ax1 = plt.subplot(gs[0, 0])
+ax2 = plt.subplot(gs[0, 1])
+ax3 = plt.subplot(gs[0, 2])
+ax4 = plt.subplot(gs[1, :])
+
+comp = sobj1.get_data(totim=times[1])
+print(comp[0, :, :])
+ax1.contourf(comp[0, :, :], levels=20, extent=extent)
+ax1.set_title("layer 1 compaction")
+ax2.contourf(comp[1, :, :], levels=20, extent=extent)
+ax2.set_title("layer 2 compaction")
+ax3.contourf(comp[2, :, :], levels=20, extent=extent)
+ax3.set_title("layer 3 compaction")
+ax4.plot(times, subs_t[:,50], "-o", label="Total Subsidence")
+ax4.plot(times, comp1_t[:,50], "-o", label="Layer 1 compaction")
+ax4.plot(times, comp2_t[:,50], "-o", label="Layer 2 compaction")
+ax4.plot(times, comp3_t[:,50], "-o", label="Layer 3 compaction")
+ax4.set_xlabel("time (days)")
+ax4.set_ylabel("subsidence(m)")
+ax4.legend()
 
 # 調整圖之間的間距
 #plt.tight_layout()
 
+
+plt.show()
 
 
 try:
